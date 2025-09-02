@@ -3,6 +3,7 @@ using Quizzy.Core.Entities;
 using Quizzy.Core.Repositories;
 using Quizzy.Web.Services;
 using Quizzy.Core.DTOs;
+using System.Linq;
 
 namespace Quizzy.Web.Hubs
 {
@@ -602,7 +603,8 @@ namespace Quizzy.Web.Hubs
 
             await _unitOfWork.SaveChangesAsync();
 
-            var totalPlayers = runtime.PlayerByConnection.Values.Distinct().Count();
+            var playersInSession = await _unitOfWork.QuizPlayers.FindAsync(p => p.QuizSession.GamePin == gamePin);
+            var totalPlayers = playersInSession.Count();
             var allAnswered = totalPlayers > 0 && runtime.AnsweredThisQuestion.Count >= totalPlayers;
 
             if (allAnswered)

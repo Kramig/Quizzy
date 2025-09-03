@@ -224,6 +224,12 @@ namespace Quizzy.Web.Hubs
                 runtime = _sessions.GetOrCreate(gamePin, () => sessionEntity);
             }
 
+            var playersExist = (await _unitOfWork.QuizPlayers.FindAsync(p => p.QuizSessionId == runtime.Session.Id)).Any();
+            if (!playersExist)
+            {
+                throw new HubException("Cannot start or play quiz without any players.");
+            }
+
             // Tell clients when the next question will start (for countdown UI)
             var startUtc = DateTimeOffset.UtcNow.AddSeconds(inSeconds);
             runtime.SetUpcoming(startUtc);

@@ -254,6 +254,8 @@ namespace Quizzy.Web.Hubs
                     // Build DTO and begin question now (sets index + timer + clears answered flags)
                     var dto = BuildQuestionStartedDto(question);
                     runtime.BeginQuestionAt(nextIndex, dto.DurationSeconds);
+                    var scheduledQuestionIndex = nextIndex;
+                    var autoEndToken = runtime.AutoEndTokenSource.Token;
 
                     // Broadcast the question
                     await hubContext.Clients.Group(gamePin).SendAsync("StartNextQuestion", dto);
@@ -267,7 +269,8 @@ namespace Quizzy.Web.Hubs
                     {
                         try
                         {
-                            await Task.Delay(TimeSpan.FromSeconds(dto.DurationSeconds));
+                            await Task.Delay(TimeSpan.FromSeconds(dto.DurationSeconds), autoEndToken);
+                            if (scheduledQuestionIndex != runtime.CurrentQuestionIndex) return;
 
                             using var endScope = _scopeFactory.CreateScope();
                             var endUow = endScope.ServiceProvider.GetRequiredService<IUnitOfWork>();
@@ -336,6 +339,10 @@ namespace Quizzy.Web.Hubs
                             };
 
                             await endHub.Clients.Group(gamePin).SendAsync("SessionStateUpdated", sessionState);
+                        }
+                        catch (TaskCanceledException)
+                        {
+                            // Timer was canceled or question changed; no action needed.
                         }
                         catch (Exception ex)
                         {

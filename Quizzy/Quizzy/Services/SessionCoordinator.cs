@@ -2,6 +2,7 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 using Quizzy.Core.Entities;
 
 namespace Quizzy.Web.Services
@@ -36,6 +37,7 @@ namespace Quizzy.Web.Services
         public ConcurrentDictionary<Guid, int> ScoreByPlayer { get; } = new();
 
         public ConcurrentDictionary<Guid, bool> AnsweredThisQuestion { get; } = new();
+        public CancellationTokenSource AutoEndTokenSource { get; private set; } = new();
 
         public int CurrentQuestionIndex { get; private set; } = -1;
 
@@ -64,11 +66,12 @@ namespace Quizzy.Web.Services
 
         public void ClearUpcoming() { NextQuestionStartUtc = null; }
 
-        public void BeginQuestionNow(int durationSeconds) { ClearUpcoming(); CurrentQuestionIndex++; CurrentQuestionStartUtc = DateTimeOffset.UtcNow; CurrentQuestionDurationSeconds = durationSeconds; AnsweredThisQuestion.Clear(); }
+        public void BeginQuestionNow(int durationSeconds) { ClearUpcoming(); ResetAutoEndToken(); CurrentQuestionIndex++; CurrentQuestionStartUtc = DateTimeOffset.UtcNow; CurrentQuestionDurationSeconds = durationSeconds; AnsweredThisQuestion.Clear(); }
         // Explicitly begin a question by index and set the timer.
         public void BeginQuestionAt(int questionIndex, int durationSeconds)
         {
             ClearUpcoming();
+            ResetAutoEndToken();
             CurrentQuestionIndex = questionIndex;
             CurrentQuestionStartUtc = DateTimeOffset.UtcNow;
             CurrentQuestionDurationSeconds = durationSeconds;
@@ -76,10 +79,20 @@ namespace Quizzy.Web.Services
         }
 
 
-        public void EndQuestion() { CurrentQuestionStartUtc = null; CurrentQuestionDurationSeconds = 0; AnsweredThisQuestion.Clear(); }
+        public void EndQuestion() { ResetAutoEndToken(); CurrentQuestionStartUtc = null; CurrentQuestionDurationSeconds = 0; AnsweredThisQuestion.Clear(); }
 
         public void MarkAnswered(Guid playerId) { AnsweredThisQuestion[playerId] = true; }
 
         public bool HasAnswered(Guid playerId) => AnsweredThisQuestion.TryGetValue(playerId, out var value) && value;
+
+        private void ResetAutoEndToken()
+        {
+            if (!AutoEndTokenSource.IsCancellationRequested)
+            {
+                AutoEndTokenSource.Cancel();
+            }
+            AutoEndTokenSource.Dispose();
+            AutoEndTokenSource = new CancellationTokenSource();
+        }
     }
 }
